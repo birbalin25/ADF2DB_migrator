@@ -1,0 +1,681 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "factoryName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Data Factory"
+      },
+      "defaultValue": "SalesDataFactory"
+    }
+  },
+  "variables": {
+    "factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+  },
+  "resources": [
+    {
+      "name": "[parameters('factoryName')]",
+      "type": "Microsoft.DataFactory/factories",
+      "apiVersion": "2018-06-01",
+      "location": "eastus",
+      "properties": {
+        "repoConfiguration": {
+          "type": "FactoryGitHubConfiguration",
+          "hostName": "github.com",
+          "accountName": "contoso",
+          "repositoryName": "sales-adf",
+          "collaborationBranch": "main",
+          "rootFolder": "/"
+        },
+        "globalParameters": {
+          "environment": {
+            "type": "string",
+            "value": "production"
+          },
+          "maxRetryCount": {
+            "type": "int",
+            "value": 3
+          }
+        }
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      }
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AutoResolveIntegrationRuntime')]",
+      "type": "Microsoft.DataFactory/factories/integrationruntimes",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "Managed",
+        "managedIntegrationRuntimeProperties": {
+          "computeProperties": {
+            "location": "eastus",
+            "nodeSize": "Standard_D4_v3",
+            "numberOfNodes": 1,
+            "maxParallelExecutionsPerNode": 4
+          }
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AzureSqlLinkedService')]",
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "AzureSqlDatabase",
+        "typeProperties": {
+          "connectionString": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "AzureKeyVaultLinkedService",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "SqlConnectionString"
+          },
+          "encryptedCredential": "ew0KICAiVmVyc2lvbiI6ICIyLjAiLA0KICAiUHJvdGVjdGlvbiI6ICJEYXRhUHJvdGVjdGlvbiIsDQogICJTY29wZSI6ICJDdXJyZW50VXNlciIsDQogICJLZXlEZXJpdmF0aW9uRnVuY3Rpb24iOiAiUGJkZjIiLA0KICAiE0FsdE0iOiBmYWxzZSwNCiAgIkl0ZXJhdGlvbkNvdW50IjogMzI3NjgsDQogICJITUFDQWxnb3JpdGhtIjogIlNIQTI1NiIsDQogICJDaXBoZXJBbGdvcml0aG0iOiAiQWVzMjU2Ig0KfQ=="
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AdlsLinkedService')]",
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "AzureBlobFS",
+        "typeProperties": {
+          "url": "https://salesdatalake.dfs.core.windows.net",
+          "servicePrincipalId": "12345678-1234-1234-1234-123456789012",
+          "servicePrincipalKey": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "AzureKeyVaultLinkedService",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "ServicePrincipalKey"
+          },
+          "tenant": "contoso.onmicrosoft.com"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AzureKeyVaultLinkedService')]",
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "AzureKeyVault",
+        "typeProperties": {
+          "baseUrl": "https://contosokv.vault.azure.net/"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AzureSqlTransactions')]",
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "AzureSqlLinkedService",
+          "type": "LinkedServiceReference"
+        },
+        "type": "SqlServerTable",
+        "typeProperties": {
+          "schema": "dbo",
+          "table": "Transactions"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/AzureSqlLinkedService')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/AdlsTransactionsParquet')]",
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "AdlsLinkedService",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Parquet",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobFSLocation",
+            "fileSystem": "transactions",
+            "folderPath": "@dataset().folderDate"
+          },
+          "compressionCodec": "snappy"
+        },
+        "parameters": {
+          "folderDate": {
+            "type": "string",
+            "defaultValue": "2024-03-01"
+          }
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/AdlsLinkedService')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/SalesTransformFlow')]",
+      "type": "Microsoft.DataFactory/factories/dataflows",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "MappingDataFlow",
+        "typeProperties": {
+          "sources": [
+            {
+              "dataset": {
+                "referenceName": "AzureSqlTransactions",
+                "type": "DatasetReference"
+              },
+              "name": "source"
+            }
+          ],
+          "sinks": [
+            {
+              "dataset": {
+                "referenceName": "AdlsTransactionsParquet",
+                "type": "DatasetReference"
+              },
+              "name": "SinkGold"
+            }
+          ],
+          "transformations": [
+            {
+              "name": "FilterHighValue"
+            },
+            {
+              "name": "JoinCustomers"
+            },
+            {
+              "name": "AggregateByRegion"
+            }
+          ],
+          "script": "source(output(TransactionID as string, CustomerID as string, Amount as double)) ~> FilterHighValue\nFilterHighValue filter(Amount > 1000) ~> JoinCustomers\nJoinCustomers, join(CustomerID == CustomerID) ~> AggregateByRegion\nAggregateByRegion aggregate(groupBy(Region), TotalSales = sum(Amount)) ~> SinkGold"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/AzureSqlTransactions')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/AdlsTransactionsParquet')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/SalesDataPipeline')]",
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "parameters": {
+          "startDate": {
+            "type": "string",
+            "defaultValue": "2024-01-01"
+          },
+          "endDate": {
+            "type": "string",
+            "defaultValue": "2024-03-31"
+          }
+        },
+        "variables": {
+          "rowCount": {
+            "type": "String",
+            "defaultValue": "0"
+          }
+        },
+        "activities": [
+          {
+            "name": "CopySqlToAdls",
+            "type": "Copy",
+            "dependsOn": [],
+            "policy": {
+              "timeout": "0.12:00:00",
+              "retry": 2,
+              "retryIntervalInSeconds": 30,
+              "secureOutput": false,
+              "secureInput": false
+            },
+            "userProperties": [],
+            "typeProperties": {
+              "source": {
+                "type": "SqlServerSource",
+                "sqlReaderQuery": "SELECT * FROM dbo.Transactions WHERE TransactionDate >= '@{pipeline().parameters.startDate}' AND TransactionDate <= '@{pipeline().parameters.endDate}'",
+                "queryTimeout": "02:00:00"
+              },
+              "sink": {
+                "type": "ParquetSink",
+                "storeSettings": {
+                  "type": "AzureBlobFSWriteSettings"
+                },
+                "formatSettings": {
+                  "type": "ParquetWriteSettings"
+                }
+              },
+              "enableStaging": true,
+              "stagingSettings": {
+                "linkedServiceName": {
+                  "referenceName": "AdlsLinkedService",
+                  "type": "LinkedServiceReference"
+                },
+                "path": "staging"
+              },
+              "translator": {
+                "type": "TabularTranslator",
+                "mappings": [
+                  {
+                    "source": {
+                      "name": "TransactionID",
+                      "type": "string"
+                    },
+                    "sink": {
+                      "name": "TransactionID",
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "source": {
+                      "name": "CustomerID",
+                      "type": "string"
+                    },
+                    "sink": {
+                      "name": "CustomerID",
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "source": {
+                      "name": "Amount",
+                      "type": "double"
+                    },
+                    "sink": {
+                      "name": "Amount",
+                      "type": "double"
+                    }
+                  }
+                ]
+              }
+            },
+            "inputs": [
+              {
+                "referenceName": "AzureSqlTransactions",
+                "type": "DatasetReference"
+              }
+            ],
+            "outputs": [
+              {
+                "referenceName": "AdlsTransactionsParquet",
+                "type": "DatasetReference",
+                "parameters": {
+                  "folderDate": "@pipeline().parameters.startDate"
+                }
+              }
+            ]
+          },
+          {
+            "name": "ExecuteSalesTransformFlow",
+            "type": "ExecuteDataFlow",
+            "dependsOn": [
+              {
+                "activity": "CopySqlToAdls",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "policy": {
+              "timeout": "1.00:00:00",
+              "retry": 1,
+              "retryIntervalInSeconds": 30,
+              "secureOutput": false,
+              "secureInput": false
+            },
+            "userProperties": [],
+            "typeProperties": {
+              "dataflow": {
+                "referenceName": "SalesTransformFlow",
+                "type": "DataFlowReference"
+              },
+              "staging": {
+                "linkedService": {
+                  "referenceName": "AdlsLinkedService",
+                  "type": "LinkedServiceReference"
+                },
+                "folderPath": "dataflow-staging"
+              },
+              "integrationRuntime": {
+                "referenceName": "AutoResolveIntegrationRuntime",
+                "type": "IntegrationRuntimeReference"
+              },
+              "traceLevel": "Fine",
+              "computeType": "General",
+              "coreCount": 8
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/AzureSqlTransactions')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/AdlsTransactionsParquet')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/dataflows/SalesTransformFlow')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/AdlsLinkedService')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/AutoResolveIntegrationRuntime')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/MasterOrchestrator')]",
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "parameters": {
+          "regions": {
+            "type": "array",
+            "defaultValue": [
+              "North America",
+              "Europe",
+              "APAC"
+            ]
+          },
+          "isFullLoad": {
+            "type": "bool",
+            "defaultValue": true
+          },
+          "notificationUrl": {
+            "type": "string",
+            "defaultValue": "https://contoso.webhook.office.com/webhookb2/xxxxx"
+          }
+        },
+        "activities": [
+          {
+            "name": "ProcessRegionsPipeline",
+            "type": "ForEach",
+            "dependsOn": [],
+            "userProperties": [],
+            "typeProperties": {
+              "items": "@pipeline().parameters.regions",
+              "isSequential": false,
+              "batchCount": 3,
+              "activities": [
+                {
+                  "name": "ExecuteSalesDataPipeline",
+                  "type": "ExecutePipeline",
+                  "dependsOn": [],
+                  "userProperties": [],
+                  "typeProperties": {
+                    "pipeline": {
+                      "referenceName": "SalesDataPipeline",
+                      "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                      "startDate": "2024-01-01",
+                      "endDate": "2024-03-31"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "CheckFullLoadCondition",
+            "type": "IfCondition",
+            "dependsOn": [
+              {
+                "activity": "ProcessRegionsPipeline",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "userProperties": [],
+            "typeProperties": {
+              "expression": {
+                "value": "@pipeline().parameters.isFullLoad",
+                "type": "Expression"
+              },
+              "ifTrueActivities": [
+                {
+                  "name": "SendSuccessNotification",
+                  "type": "WebActivity",
+                  "dependsOn": [],
+                  "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                  },
+                  "userProperties": [],
+                  "typeProperties": {
+                    "url": "@pipeline().parameters.notificationUrl",
+                    "method": "POST",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "text": "Full load completed successfully",
+                      "pipelineName": "@pipeline().Pipeline",
+                      "runId": "@pipeline().RunId",
+                      "timestamp": "@utcNow()"
+                    },
+                    "connectViaTimeout": "0.00:30:00",
+                    "httpRequestTimeout": "0.00:05:00"
+                  }
+                }
+              ],
+              "ifFalseActivities": [
+                {
+                  "name": "SendIncrementalNotification",
+                  "type": "WebActivity",
+                  "dependsOn": [],
+                  "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                  },
+                  "userProperties": [],
+                  "typeProperties": {
+                    "url": "@pipeline().parameters.notificationUrl",
+                    "method": "POST",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "text": "Incremental load completed successfully",
+                      "pipelineName": "@pipeline().Pipeline",
+                      "runId": "@pipeline().RunId",
+                      "timestamp": "@utcNow()"
+                    },
+                    "connectViaTimeout": "0.00:30:00",
+                    "httpRequestTimeout": "0.00:05:00"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/SalesDataPipeline')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/DailySchedule')]",
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "startTime": "2024-01-01T02:00:00Z",
+            "timeZone": "UTC",
+            "schedule": {
+              "minutes": [
+                0
+              ],
+              "hours": [
+                2
+              ]
+            }
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "SalesDataPipeline",
+              "type": "PipelineReference"
+            },
+            "parameters": {
+              "startDate": "2024-01-01",
+              "endDate": "2024-03-31"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/SalesDataPipeline')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/WeeklyOrchestrator')]",
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "TumblingWindowTrigger",
+        "typeProperties": {
+          "frequency": "Week",
+          "interval": 1,
+          "startTime": "2024-01-01T00:00:00Z",
+          "endTime": "2024-12-31T23:59:59Z",
+          "delay": "0.00:05:00",
+          "maxConcurrency": 1,
+          "retryPolicy": {
+            "intervalInSeconds": 600,
+            "maxAttempts": 2
+          },
+          "dependsOn": []
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "MasterOrchestrator",
+              "type": "PipelineReference"
+            },
+            "parameters": {
+              "regions": [
+                "North America",
+                "Europe",
+                "APAC"
+              ],
+              "isFullLoad": true,
+              "notificationUrl": "https://contoso.webhook.office.com/webhookb2/xxxxx"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/MasterOrchestrator')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/SalesCDC')]",
+      "type": "Microsoft.DataFactory/factories/adfcdcs",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "typeProperties": {
+          "sourceConnectionsInfo": [
+            {
+              "sourceEntities": [{"name": "[dbo].[Transactions]"}],
+              "connection": {
+                "linkedService": {
+                  "referenceName": "AzureSqlLinkedService",
+                  "type": "LinkedServiceReference"
+                }
+              }
+            }
+          ],
+          "targetConnectionsInfo": [
+            {
+              "targetEntities": [{"name": "[dbo].[Transactions_CDC]"}],
+              "connection": {
+                "linkedService": {
+                  "referenceName": "AdlsLinkedService",
+                  "type": "LinkedServiceReference"
+                }
+              }
+            }
+          ]
+        },
+        "policy": {
+          "mode": "Microbatch",
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 15
+          }
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/ManagedIdentityCredential')]",
+      "type": "Microsoft.DataFactory/factories/credentials",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "ManagedIdentity",
+        "typeProperties": {
+          "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/mi-sales"
+        }
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/default')]",
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks",
+      "apiVersion": "2018-06-01",
+      "properties": {},
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('factoryName'), '/default/AzureSqlPrivateEndpoint')]",
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "privateLinkResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Sql/servers/contoso-sql",
+        "groupId": "sqlServer",
+        "fqdns": ["contoso-sql.database.windows.net"]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ]
+    }
+  ]
+}
