@@ -4,7 +4,7 @@ An AI-assisted migration analysis pipeline that converts **Azure Data Factory (A
 
 ## How It Works
 
-The framework runs as a two-step Databricks Workflow, where each notebook builds on the output of the previous one:
+The framework runs as two Databricks notebooks, where each builds on the output of the previous one:
 
 ```
 ARM Template (JSON)
@@ -43,8 +43,7 @@ adf-to-databricks-migration/
 ├── discovery/
 │   ├── export_adf_artifacts.ps1        # PowerShell script to export ADF
 │   └── adf_to_pyspark_prompt.md        # Manual LLM prompt template
-├── databricks.yml                      # Databricks Asset Bundles config
-├── .github/workflows/deploy.yml        # CI/CD pipeline
+├── .github/workflows/ci.yml            # CI pipeline (test on push/PR)
 ├── CLAUDE.md                           # AI assistant project context
 └── README.md                           # This file
 ```
@@ -56,8 +55,6 @@ adf-to-databricks-migration/
 - A Databricks workspace with Unity Catalog enabled
 - A Foundation Model API endpoint (default: `databricks-meta-llama-3-3-70b-instruct`)
 - An ADF ARM template export (JSON)
-- Databricks CLI installed (for DABs deployment)
-
 ### Step 1: Export Your ADF ARM Template
 
 **Option A — ADF Studio UI:**
@@ -81,24 +78,13 @@ Upload the exported JSON to a Databricks Volume or DBFS path:
 /Volumes/main/default/migration/arm_template.json
 ```
 
-### Step 3: Deploy the Workflow
+### Step 3: Run the Notebooks
 
-```bash
-# Validate the bundle
-databricks bundle validate --target dev
-
-# Deploy to dev
-databricks bundle deploy --target dev
-
-# Run the job
-databricks bundle run adf_migration_analysis --target dev
-```
-
-Or run each notebook individually from the Databricks workspace UI.
+Run each notebook from the Databricks workspace UI, or import and execute them in order.
 
 ### Step 4: Review the Output
 
-After the workflow completes, two Unity Catalog tables are available:
+After the notebooks complete, two Unity Catalog tables are available:
 
 | Table | Contents |
 |---|---|
@@ -109,7 +95,7 @@ After the workflow completes, two Unity Catalog tables are available:
 
 ### Notebook Parameters
 
-All parameters have sensible defaults and can be overridden via Databricks widgets or DABs `base_parameters`.
+All parameters have sensible defaults and can be overridden via Databricks widgets.
 
 **Notebook 01 — Component Mapping:**
 
@@ -131,13 +117,6 @@ Same as notebook 01 plus:
 | Parameter | Default | Description |
 |---|---|---|
 | `render_graph` | `yes` | Generate dependency graph visualizations |
-
-### DABs Targets
-
-| Target | Workspace | Catalog |
-|---|---|---|
-| `dev` (default) | `https://adb-dev.azuredatabricks.net` | `dev_catalog` |
-| `prod` | `https://adb-prod.azuredatabricks.net` | `prod_catalog` |
 
 ## ADF Component Coverage
 
@@ -168,20 +147,6 @@ pytest tests/test_dependency_analyzer.py -v
 
 ## CI/CD
 
-The GitHub Actions workflow (`.github/workflows/deploy.yml`) runs on push/PR to `main`:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push/PR to `main`:
 
-1. **Validate** — `databricks bundle validate --target dev`
-2. **Test** — `pytest tests/ -v --tb=short`
-3. **Deploy Dev** — `databricks bundle deploy --target dev` (push to main only)
-4. **Deploy Prod** — `databricks bundle deploy --target prod` (after dev succeeds)
-
-## Technology Stack (2026)
-
-The generated code uses current Databricks capabilities:
-
-- **Lakeflow Spark Declarative Pipelines (SDP)** — replaces DLT (`from pyspark import pipelines as dp`)
-- **Serverless compute** — GA for notebooks, jobs, and SDP
-- **Auto Loader file events mode** — replaces `cloudFiles.useIncrementalListing`
-- **Lakeflow Connect** — GA connectors for Salesforce, Workday, SQL Server, ServiceNow
-- **DABs** — 22+ resource types (job, pipeline, catalog, schema, volume, secret_scope, etc.)
-- **Workflow triggers** — cron, file arrival, table update (with `wait_after_last_change_seconds`)
+1. **Test** — `pytest tests/ -v --tb=short`

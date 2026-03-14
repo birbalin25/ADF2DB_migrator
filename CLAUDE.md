@@ -46,8 +46,7 @@ Each notebook reads from DBFS/Volumes (ARM template JSON) and/or upstream Unity 
 | `tests/test_component_mapping.py` | 91 tests for notebook 01 |
 | `tests/test_dependency_analyzer.py` | 60 tests for notebook 02 |
 | `tests/sample_arm_template.json` | Shared test fixture — full ARM template |
-| `databricks.yml` | DABs config: 2-task job (`component_mapping` → `dependency_analysis`) |
-| `.github/workflows/deploy.yml` | CI/CD: validate → test → deploy-dev → deploy-prod |
+| `.github/workflows/ci.yml` | CI: lint → test on push/PR |
 | `discovery/export_adf_artifacts.ps1` | PowerShell to export ADF artifacts from Azure |
 | `discovery/adf_to_pyspark_prompt.md` | Manual LLM prompt template for ad-hoc conversions |
 
@@ -72,14 +71,6 @@ Skipped types (no code generation): `Parameter`, `Variable`, `GlobalParameter`, 
 - **Client**: `mlflow.deployments.get_deploy_client("databricks")`
 - **Temperature**: 0.05 (near-deterministic)
 - **Response format**: JSON with `{}`/`}` boundary parsing (handles markdown fences, preamble)
-
-## DABs Configuration
-
-- Bundle name: `adf-to-databricks-migration`
-- Variables: `catalog` (default: `main`), `schema` (default: `migration`)
-- Targets: `dev` (default, `dev_catalog`), `prod` (`prod_catalog`)
-- Job: `adf_migration_analysis` with 2 sequential tasks
-- Compute: Serverless
 
 ## Running Tests
 
