@@ -20,6 +20,7 @@ targets:
     mode: production
     workspace:
       host: https://adb-984752964297111.11.azuredatabricks.net
+      root_path: /Workspace/Users/birbal.das@databricks.com/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: bircatalog
 
@@ -40,7 +41,7 @@ resources:
         - task_key: component_mapping
           description: "Step 1: Parse ARM template, classify components, map to Databricks equivalents"
           notebook_task:
-            notebook_path: ./notebooks/01_adf_component_mapping.py
+            notebook_path: ./notebooks/02_adf2db_mapping.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
@@ -51,18 +52,7 @@ resources:
           depends_on:
             - task_key: component_mapping
           notebook_task:
-            notebook_path: ./notebooks/02_adf_dependency_analyzer.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-          environment_key: default
-
-        - task_key: code_conversion
-          description: "Step 3: Generate Databricks code via Foundation Model API"
-          depends_on:
-            - task_key: dependency_analysis
-          notebook_task:
-            notebook_path: ./notebooks/03_adf_code_converter.py
+            notebook_path: ./notebooks/01_adf_analyzer.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
