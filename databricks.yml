@@ -19,9 +19,9 @@ targets:
   prod:
     mode: production
     workspace:
-      host: https://adb-prod.azuredatabricks.net
+      host: https://adb-984752964297111.11.azuredatabricks.net
     variables:
-      catalog: prod_catalog
+      catalog: bircatalog
 
 resources:
   jobs:
@@ -44,10 +44,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: Standard_DS3_v2
-            num_workers: 1
+          environment_key: default
 
         - task_key: dependency_analysis
           description: "Step 2: Build dependency graph, assign migration phases & units"
@@ -58,10 +55,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: Standard_DS3_v2
-            num_workers: 1
+          environment_key: default
 
         - task_key: code_conversion
           description: "Step 3: Generate Databricks code via Foundation Model API"
@@ -72,7 +66,9 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: Standard_DS3_v2
-            num_workers: 1
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
