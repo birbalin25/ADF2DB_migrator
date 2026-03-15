@@ -445,6 +445,26 @@ def enrich_component(comp: dict) -> dict:
         meta["sink_count"] = len(tp.get("sinks", []))
         meta["transformation_count"] = len(tp.get("transformations", []))
 
+        # Fallback: parse scriptLines/script when structured arrays are empty
+        if meta["source_count"] == 0 and meta["sink_count"] == 0:
+            script_lines = tp.get("scriptLines", [])
+            script_str = tp.get("script", "")
+            if script_lines:
+                dfl_text = "\n".join(script_lines)
+            elif script_str:
+                dfl_text = script_str
+            else:
+                dfl_text = ""
+            if dfl_text:
+                meta["source_count"] = len(re.findall(r"\bsource\s*\(", dfl_text))
+                meta["sink_count"] = len(re.findall(r"\bsink\s*\(", dfl_text))
+                # Lines with ~> that are not source() or sink() are transformations
+                all_steps = [ln.strip() for ln in dfl_text.split("\n") if "~>" in ln]
+                meta["transformation_count"] = len(all_steps) - meta["source_count"] - meta["sink_count"]
+                if meta["transformation_count"] < 0:
+                    meta["transformation_count"] = 0
+                meta["uses_inline_script"] = True
+
     elif ctype == "Trigger":
         meta["trigger_type"] = props.get("type", "")
         meta["pipeline_count"] = len(props.get("pipelines", []))
@@ -501,13 +521,29 @@ if any(len(v) > 1 for v in _activity_profiles.values()):
 
 # COMMAND ----------
 
-def topological_phases(graph: nx.DiGraph) -> dict[str, int]:
+CO_EXECUTION_RELATIONSHIPS = {"uses_dataflow"}
+
+
+def topological_phases(graph: nx.DiGraph, co_execution_rels: set[str] | None = None) -> dict[str, int]:
     """
     BFS-based layering on the DAG.
     Nodes with zero out-degree (no dependencies) → Phase 1.
     Then remove them, repeat.
+
+    co_execution_rels: edge relationship types (e.g. "uses_dataflow") that represent
+    co-execution pairs rather than prerequisite dependencies. These edges are removed
+    before BFS layering, then the paired components are merged to the max phase of either.
     """
     work = graph.copy()
+
+    # Collect co-execution pairs and remove those edges before BFS
+    co_pairs = []
+    if co_execution_rels:
+        for u, v, d in list(work.edges(data=True)):
+            if d.get("relationship") in co_execution_rels:
+                co_pairs.append((u, v))
+                work.remove_edge(u, v)
+
     phases = {}
     current_phase = 1
     while work.number_of_nodes() > 0:
@@ -522,9 +558,17 @@ def topological_phases(graph: nx.DiGraph) -> dict[str, int]:
             phases[n] = current_phase
         work.remove_nodes_from(leaves)
         current_phase += 1
+
+    # Merge co-execution pairs: both get max(phase_a, phase_b)
+    for u, v in co_pairs:
+        if u in phases and v in phases:
+            merged = max(phases[u], phases[v])
+            phases[u] = merged
+            phases[v] = merged
+
     return phases
 
-phase_map = topological_phases(G)
+phase_map = topological_phases(G, co_execution_rels=CO_EXECUTION_RELATIONSHIPS)
 
 # Summary
 phase_groups = defaultdict(list)
