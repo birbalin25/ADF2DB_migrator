@@ -3,15 +3,15 @@ I need to migrate Azure Data Factory (ADF) factory to Databricks.
 INPUT DETAILS:
 
 ARM Template (could be single file or directory with multiple files):
-/Users/birbal.das/Downloads/ARMTemplateForFactory.json
+/Users/birbal.das/Downloads/ARMTemplateForFactory.json        <---- change this
 
-Analyzer Output Table: bircatalog.birschema.Dependency_Analysis
-Migration Phase: Phase 1
+Analyzer Output Table: bircatalog.birschema.Dependency_Analysis       <---- change this
+Migration Phase: Phase 1        <---- change this
 
 Target Configuration:
-- Unity Catalog: bircatalog
-- Schema: birschema
-- Output Directory: /databricks_migration
+- Unity Catalog: bircatalog         <---- change this
+- Schema: birschema           <---- change this
+- Output Directory: /databricks_migration   
 
 
 STEP 1 — Dependency Filtering:
