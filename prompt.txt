@@ -5,13 +5,15 @@ INPUT DETAILS:
 ARM Template (could be single file or directory with multiple files):
 /Users/birbal.das/Downloads/ARMTemplateForFactory.json        <---- change this
 
-Analyzer Output Table: bircatalog.birschema.Dependency_Analysis       <---- change this
+Analyzer Output Table: bircatalog.adf2db.analyzer       <---- change this
 Migration Phase: Phase 1        <---- change this
+Databricks CLI profile: azure11         <---- change this
 
 Target Configuration:
 - Unity Catalog: bircatalog         <---- change this
 - Schema: birschema           <---- change this
 - Output Directory: /databricks_migration   
+ 
 
 
 STEP 1 — Dependency Filtering:
@@ -37,7 +39,7 @@ IMPORTANT
 Only convert ADF components whose `migration_phase` matches the phase
 specified above.
 
-Query the analyzer table:
+Query the analyzer table (use Databricks CLI profile specified above to access the table):
 
 ```sql
 SELECT component_type, component_name, depends_on, migration_unit
