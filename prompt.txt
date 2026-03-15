@@ -147,6 +147,87 @@ resources/*.yml`. The bundle must be fully parameterized. Organize all files int
   - credential configuration
   - network/VNet requirements
 
+  E. Actions Required Before Deployment (ACTION_TO_TAKE)                                  
+                                                                                            
+    After ALL code generation is complete, perform a dependency gap analysis:               
+                                                                                            
+    1. For every workflow job YAML in resources/, collect all tables that its               
+       tasks read from (DLT pipeline sources via spark.read.table(), notebook               
+       spark.read.table(), Auto Loader target tables used downstream, etc.).
+
+    2. For every ingestion notebook in src/notebooks/ingestion/, identify the
+       target table it writes to.
+
+    3. For every transformation notebook in src/notebooks/transformations/,
+       identify the source tables it reads from AND the target tables it writes to.
+
+    4. Cross-reference: if a table consumed by a job task is produced by a
+       notebook that is NOT included as a task in that job's DAG, flag it.
+
+    5. Also flag: secret scopes, external locations, UC schemas/catalogs,
+       network configs, or any other infrastructure that must exist before
+       the generated code can run but is not created by the bundle.
+
+    Format each finding as:
+
+      ACTION_TO_TAKE #N: [short description of the gap]
+
+        DETAIL:    [which notebook/job consumes what, and which notebook
+                    produces it, with full file paths and table names]
+        REASON:    [explain WHY the converter did not wire this into the
+                    job DAG — e.g., "no corresponding ADF Copy Activity
+                    existed in the pipeline; the ingestion notebook was
+                    generated as new infrastructure to feed the DLT
+                    pipeline, so no ADF activity-to-task mapping created
+                    the dependency"]
+        TAKE_ACTION: [concrete instruction describing what needs to happen]
+        RUN_THIS_PROMPT: [provide an exact copy-paste prompt that the user
+                    can paste directly into Claude Code to fix this gap.
+                    The prompt must be self-contained — it must reference
+                    exact file paths, table names, task keys, and job
+                    names so the agent can execute without ambiguity.
+                    Wrap the prompt in triple backticks for easy copying.]
+
+    Example:
+
+      ACTION_TO_TAKE #1: Ingestion notebook not wired into workflow job
+
+        DETAIL:    customer_transaction_dataflow.py (DLT pipeline) reads from
+                   bircatalog.birschema.customers_raw, which is produced by
+                   src/notebooks/ingestion/ingest_customers_jdbc.py. However,
+                   ingest_customers_jdbc.py is not a task in
+                   resources/customer_transaction_pipeline_job.yml.
+        REASON:    The ADF pipeline had no Copy Activity — the Data Flow read
+                   from sources directly. The ingestion notebook was generated
+                   as new infrastructure to populate the UC source table, so
+                   no ADF activity-to-task mapping created this dependency.
+        TAKE_ACTION: Add ingest_customers_jdbc.py as an upstream notebook_task
+                   in the workflow job before the DLT pipeline task.
+        RUN_THIS_PROMPT:
+                   ```
+                   In databricks_migration/resources/customer_transaction_pipeline_job.yml,
+                   add a new notebook_task with task_key "ingest_customers_jdbc" that runs
+                   src/notebooks/ingestion/ingest_customers_jdbc.py with base_parameters
+                   catalog=${var.catalog}, schema=${var.schema}, target_table="customers_raw".
+                   Then add this task_key to the depends_on list of the
+                   execute_customer_transaction_dataflow task so ingestion runs first.
+                   Do not modify any other files.
+                   ```
+
+    Cover ALL of the following categories:
+    - Tables produced by ingestion notebooks but not wired into any job DAG
+    - Tables produced by transformation notebooks that another job reads
+      but has no dependency on
+    - Secret scopes referenced in dbutils.secrets.get() that must be created
+    - External locations or storage credentials required for Auto Loader /
+      JDBC sources
+    - Unity Catalog catalogs/schemas that must pre-exist
+    - Service principals referenced in prod targets
+    - Network/VNet prerequisites for reaching external data sources
+
+    Do NOT skip this section. Even if there are zero gaps, state
+    "No action items identified — all dependencies are wired in job DAGs."
+
 Requirements:
 - All code must use Unity Catalog 3-level namespace (catalog.schema.table)
 - Use python as default language unless explicitly specified.
