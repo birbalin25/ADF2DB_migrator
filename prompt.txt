@@ -1,0 +1,166 @@
+I need to migrate Azure Data Factory (ADF) factory to Databricks.
+
+INPUT DETAILS:
+
+ARM Template (could be single file or directory with multiple files):
+/Users/birbal.das/Downloads/ARMTemplateForFactory.json
+
+Analyzer Output Table: bircatalog.birschema.Dependency_Analysis
+Migration Phase: Phase 1
+
+Target Configuration:
+- Unity Catalog: bircatalog
+- Schema: birschema
+- Output Directory: /databricks_migration
+
+
+STEP 1 — Dependency Filtering:
+
+The Analyzer Output Table specified above was produced by the
+ADF Dependency Analyzer notebook (`01_adf_analyzer.py`).
+
+It contains one row per ADF component with columns:
+
+- component_type
+- component_name
+- migration_phase
+- depends_on
+- depended_on_by
+- migration_unit
+- migration_unit_name
+- migration_risk
+- migration_notes
+
+
+IMPORTANT
+
+Only convert ADF components whose `migration_phase` matches the phase
+specified above.
+
+Query the analyzer table:
+
+```sql
+SELECT component_type, component_name, depends_on, migration_unit
+FROM bircatalog.birschema.Dependency_Analysis
+WHERE migration_phase = 'Phase 1'
+
+Rules:
+  • Skip all components not in the target phase.
+  • If a pipeline references a dataset or linked service belonging to a later phase,
+generate a stub placeholder:
+TODO: Available after Phase N migration
+  • If the selected phase contains no pipelines (example: Phase 1 only contains
+LinkedServices and Datasets), then generate only ingestion notebooks and
+infrastructure. Skip workflow YAML and DLT.
+
+
+
+STEP 2 — Perform Full End-to-End code conversion
+
+Use any available project skills if needed.
+
+EXECUTION STEPS:
+
+
+1. **Parse & Inventory**: Parse the ARM template and produce a full component inventory with Databricks equivalents and complexity scores. Show me the
+summary table.
+
+2. **Convert Pipelines → Workflow YAML**: For every ADF pipeline, generate a Databricks Workflow job YAML file (DABs format) in `resources/`. Map all
+activities to tasks with correct dependency DAG. Convert ForEach → for_each_task, IfCondition → condition_task, Switch → chained condition_task, Until →
+notebook with while loop, ExecutePipeline → run_job_task.
+
+3. **Convert Copy Activities → Ingestion Notebooks**: For every Copy activity, resolve the Dataset → LinkedService chain and generate a PySpark ingestion
+notebook in `src/notebooks/ingestion/`. Use Auto Loader (cloudFiles) for file sources (Parquet, CSV, JSON), Spark JDBC for database sources (Azure SQL, SQL
+Server, PostgreSQL, etc.), and note Lakeflow Connect for supported SaaS sources (Salesforce, Workday, ServiceNow). Include column mappings from
+TabularTranslator. Use `dbutils.secrets.get()` for all credentials.
+
+4. **Convert Data Flows → DLT/PySpark Notebooks**: For every Mapping Data Flow, parse the DFL script and generate a Lakeflow Declarative Pipeline notebook
+in `src/notebooks/transformations/` using `from pyspark import pipelines as dp` with `@dp.table` and `@dp.materialized_view` decorators. Map all DFL
+transforms: filter → .filter(), derive → .withColumn(), aggregate → .groupBy().agg(), join → .join(), conditionalSplit → multiple @dp.table with filters,
+window → Window.partitionBy(), alterRow → dp.apply_changes().
+
+5. **Translate All Expressions**: Convert every ADF expression (@pipeline().parameters.X → dbutils.widgets.get("X"), @activity('name').output →
+dbutils.jobs.taskValues.get(), @concat → f-string, @utcNow → datetime.now(timezone.utc), @formatDateTime → .strftime() with correct format conversion
+yyyy→%Y, MM→%m, dd→%d, etc.).
+
+6. **Convert Triggers → Schedules**: Convert ScheduleTrigger → quartz_cron_expression, TumblingWindowTrigger → periodic schedule with window parameters,
+BlobEventsTrigger → file_arrival trigger. Add schedule sections to the corresponding job YAML files.
+
+7. **Convert Integration Runtimes → Compute Config**: Map Managed IR → serverless compute (omit cluster config), Self-Hosted IR → document VNet injection
+requirements.
+
+8. **Generate Orchestration Notebooks**: For activities that need Python logic (WebActivity → requests notebook, Lookup → spark.read notebook, SetVariable →
+ taskValues notebook, Wait → time.sleep notebook, Until → while-loop notebook, Fail → raise Exception notebook), generate stub notebooks in
+`src/notebooks/orchestration/`.
+
+9. **Assemble Complete DABs Bundle**: Generate `databricks.yml` with bundle name, catalog/schema variables, dev+stage+prod targets, and `include:
+resources/*.yml`. The bundle must be fully parameterized. Organize all files into:
+   databricks_migration/
+   ├── databricks.yml
+   ├── resources/*.yml          (one per pipeline/DLT pipeline)
+   ├── src/notebooks/
+   │   ├── ingestion/           (Copy activity notebooks)
+   │   ├── transformations/     (Data Flow DLT notebooks)
+   │   └── orchestration/       (stub notebooks for control flow)
+   └── .github/workflows/deploy.yml  (CI/CD)
+
+10. **Migration Report**: At the end produce a detailed migration report containing:
+  - total number of ADF components discovered
+  - number of components converted
+  - number of generated notebooks
+  - number of workflow jobs generated
+  - warnings
+  - manual migration items
+  - deployment instructions
+
+  The report must also include the following sections:
+
+  A. Important Assumptions Made During Conversion
+
+  Examples:
+  - assumptions about schema inference
+  - inferred column mappings
+  - inferred source formats
+  - inferred compute configuration
+
+  B. Automated Decisions Applied by the Converter
+
+  Examples:
+  - Auto Loader selected for file ingestion
+  - serverless compute selected for execution
+  - Lakeflow declarative pipeline/DLT selected for Data Flow conversion
+  - workflow DAG inferred from activity dependencies
+
+  C. Items Requiring Manual Validation
+
+  Examples:
+  - external API integrations
+  - custom scripts
+  - unsupported activities
+  - complex expression translations
+
+  D. Potential Migration Risks
+
+  Examples:
+  - schema drift
+  - runtime dependency mismatch
+  - credential configuration
+  - network/VNet requirements
+
+Requirements:
+- All code must use Unity Catalog 3-level namespace (catalog.schema.table)
+- Use python as default language unless explicitly specified.
+- All credentials via dbutils.secrets.get(scope, key) — never hardcode
+- Use serverless compute as default (no cluster config unless needed)
+- Every notebook starts with `# Databricks notebook source`
+- Write ALL files to disk — I want a complete deployable project
+- Flag any components that need manual migration (SSIS, AzureML, USql) with TODO stubs
+- Generate summary report. Highlight any assumptions made
+
+Usage tips:
+- If the ARM template is a file, just replace the JSON with the file path
+- If your factory is large, Claude will process pipelines sequentially and write each file
+- After generation, deploy with: cd databricks_migration && databricks bundle validate --target dev && databricks bundle deploy --target dev
+
+
+Let me know if any project skills are relevant for this request. If yes, list the applicable Claude project skills and share the execution plan before starting
