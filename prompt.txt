@@ -104,7 +104,7 @@ resources/*.yml`. The bundle must be fully parameterized. Organize all files int
    │   └── orchestration/       (stub notebooks for control flow)
    └── .github/workflows/deploy.yml  (CI/CD)
 
-10. **Migration Report**: At the end produce a detailed migration report containing:
+10. **Migration Report**: At the end create a detailed migration report file "migration_report.txt" containing:
   - total number of ADF components discovered
   - number of components converted
   - number of generated notebooks
