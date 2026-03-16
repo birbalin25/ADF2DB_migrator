@@ -79,7 +79,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install networkx matplotlib --quiet
+# MAGIC %pip install networkx matplotlib mlflow --quiet
 
 # COMMAND ----------
 
@@ -98,12 +98,12 @@ dbutils.widgets.text("input_path", "/Volumes/main/default/migration/arm_template
 dbutils.widgets.text("factory_name", "", "Data Factory Name (auto-detected if blank)")
 
 # -- LLM parameters --
-dbutils.widgets.text("llm_endpoint", "databricks-meta-llama-3-3-70b-instruct", "Foundation Model Endpoint")
+dbutils.widgets.text("llm_endpoint", "databricks-claude-sonnet-4-6", "Foundation Model Endpoint")
 
 # -- Output parameters --
 dbutils.widgets.text("output_catalog", "bircatalog", "Output Unity Catalog")
 dbutils.widgets.text("output_schema", "birschema", "Output Schema")
-dbutils.widgets.text("output_table", "Dependency_Analysis", "Output Table Name")
+dbutils.widgets.text("output_table", "Analyzer_output", "Output Table Name")
 dbutils.widgets.dropdown("output_write_mode", "overwrite", ["overwrite", "append"], "Table Write Mode")
 
 # -- Graph parameters --
@@ -1052,7 +1052,7 @@ for comp in components:
     })
 
 print(f"\nClassified {len(rows)} components across {max(phase_map.values())} phases.")
-unit_counts = Counter(r["migration_unit"] for r in rows)
+unit_counts = _Counter(r["migration_unit"] for r in rows)
 print("Migration Units: " + ", ".join(f"{k}={v}" for k, v in unit_counts.most_common()))
 
 # COMMAND ----------
