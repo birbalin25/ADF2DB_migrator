@@ -4,7 +4,7 @@ An AI-assisted migration framework that converts **Azure Data Factory (ADF)** AR
 
 ## How It Works
 
-### Phase 1 — Analysis (Databricks Notebooks)
+### Phase 1 — Analysis ( Databricks Notebooks )
 
 Two notebooks run on Databricks to analyze the ADF factory and produce a migration plan:
 
